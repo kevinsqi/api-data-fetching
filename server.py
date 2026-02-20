@@ -40,39 +40,46 @@ def get_usage_value_for_time(dt: datetime, meter_id: str) -> float:
     """
     Deterministically generate usage value based on timestamp and meter_id.
 
-    Usage pattern:
-    - Base load: ~5 kWh (always-on appliances)
-    - Peak during day (8am-8pm): up to ~25 kWh
-    - Low at night (12am-6am): ~3-8 kWh
-    - Smooth transitions using sine waves
-
-    Meter ID adds slight variation so different meters have different patterns.
+    Each meter has a distinct pattern based on its ID:
+    - Different peak hours (shifted by meter bucket)
+    - Different magnitude multipliers
+    - Different base loads
     """
     # Extract meter number for deterministic variation
     meter_num = int(meter_id[-6:])
-    meter_offset = (meter_num % 100) / 100.0  # 0.0 to 0.99
+
+    # Create distinct buckets for different meter behaviors
+    magnitude_bucket = meter_num % 10  # 0-9: affects overall scale
+    time_shift_bucket = (meter_num // 10) % 10  # 0-9: shifts peak hours
+    pattern_bucket = (meter_num // 100) % 10  # 0-9: morning vs evening person
 
     hour = dt.hour + dt.minute / 60.0
 
-    # Base load (always-on: fridge, etc.)
-    base_load = 5.0 + meter_offset * 2.0
+    # Shift peak hours by -4 to +5 hours based on meter
+    hour_shifted = (hour - time_shift_bucket + 4) % 24
+
+    # Base load varies 3-12 kWh based on meter
+    base_load = 3.0 + magnitude_bucket * 1.0
+
+    # Magnitude multiplier 0.5x to 1.5x
+    magnitude = 0.5 + (magnitude_bucket / 9.0)
 
     # Daily pattern using sine wave
-    # Peak at 2pm (hour 14), trough at 2am (hour 2)
-    daily_phase = (hour - 14) * (2 * math.pi / 24)
-    daily_variation = -math.cos(daily_phase)  # -1 to 1, peaks at hour 14
+    daily_phase = (hour_shifted - 14) * (2 * math.pi / 24)
+    daily_variation = -math.cos(daily_phase)
 
-    # Morning spike (people waking up, 6-9am)
-    morning_spike = math.exp(-((hour - 7.5) ** 2) / 2) * 3.0
+    # Morning vs evening person based on pattern_bucket
+    morning_weight = (10 - pattern_bucket) / 10.0  # 1.0 to 0.1
+    evening_weight = pattern_bucket / 10.0  # 0.0 to 0.9
 
-    # Evening spike (cooking, TV, 6-9pm)
-    evening_spike = math.exp(-((hour - 19) ** 2) / 2) * 4.0
+    morning_spike = math.exp(-((hour_shifted - 7.5) ** 2) / 2) * 5.0 * morning_weight
+    evening_spike = math.exp(-((hour_shifted - 19) ** 2) / 2) * 6.0 * evening_weight
 
-    # Combine components
-    usage = base_load + (daily_variation + 1) * 8.0 + morning_spike + evening_spike
+    # Combine components with magnitude scaling
+    usage = base_load + ((daily_variation + 1) * 8.0 + morning_spike + evening_spike) * magnitude
 
-    # Add minute-level variation (small, deterministic)
-    minute_variation = math.sin(dt.minute * 0.1 + meter_num * 0.01) * 0.5
+    # Add minute-level variation (deterministic per meter)
+    minute_variation = math.sin(dt.minute * 0.1 + meter_num * 0.1) * 0.5
     usage += minute_variation
 
     # Ensure non-negative and round to 2 decimal places
