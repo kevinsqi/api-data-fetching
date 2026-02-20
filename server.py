@@ -10,7 +10,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from meters_data import METERS
+# Hardcoded list of 1000 meter IDs
+METERS = [{"meter_id": f"1020{100000 + i:06d}"} for i in range(1000)]
 
 # Rate limiter setup - 20 requests per second globally
 limiter = Limiter(key_func=get_remote_address)
@@ -86,7 +87,7 @@ VALID_METER_IDS = {m["meter_id"] for m in METERS}
 @limiter.limit("20/second")
 async def get_meters(request: Request):
     """Return list of all 1000 meters."""
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
     return METERS
 
 
@@ -125,7 +126,7 @@ async def get_meter_usage(
             detail="Time range too large. Maximum 24 hours (1440 minutes) allowed.",
         )
 
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
 
     # Generate minute-level readings
     readings = []
