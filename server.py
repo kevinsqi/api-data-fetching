@@ -1,3 +1,4 @@
+import asyncio
 import math
 from datetime import datetime, timezone
 from typing import List
@@ -85,6 +86,7 @@ VALID_METER_IDS = {m["meter_id"] for m in METERS}
 @limiter.limit("20/second")
 async def get_meters(request: Request):
     """Return list of all 1000 meters."""
+    await asyncio.sleep(0.05)
     return METERS
 
 
@@ -122,6 +124,8 @@ async def get_meter_usage(
             status_code=400,
             detail="Time range too large. Maximum 24 hours (1440 minutes) allowed.",
         )
+
+    await asyncio.sleep(0.05)
 
     # Generate minute-level readings
     readings = []
