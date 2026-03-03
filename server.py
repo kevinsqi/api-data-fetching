@@ -10,10 +10,10 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# Hardcoded list of 1000 meter IDs
-METERS = [{"meter_id": f"1020{100000 + i:06d}"} for i in range(1000)]
+# Hardcoded list of 100  meter IDs
+METERS = [{"meter_id": f"{i:04d}"} for i in range(100)]
 
-# Rate limiter setup - 20 requests per second globally
+# Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Meter Usage API")
 app.state.limiter = limiter
@@ -98,19 +98,10 @@ async def get_meters(request: Request):
     return METERS
 
 
-@app.get("/meter-usage", response_model=List[UsageReading])
-@limiter.limit("20/second")
-async def get_meter_usage(
-    request: Request,
-    meter_id: str = Query(..., description="The meter ID to query"),
-    start_time: str = Query(..., description="Start time in ISO format (e.g., 2025-01-01T00:00:00Z)"),
-    end_time: str = Query(..., description="End time in ISO format (e.g., 2025-01-01T01:00:00Z)"),
-):
-    """
-    Return minute-level usage data for a meter within the specified time range.
+async def _get_meter_usage_impl(meter_id: str, start_time: str, end_time: str) -> List[dict]:
+    """Helper function containing the meter usage logic."""
+    from datetime import timedelta
 
-    Returns data points at 1-minute intervals from start_time up to (but not including) end_time.
-    """
     # Validate meter_id
     if meter_id not in VALID_METER_IDS:
         raise HTTPException(status_code=404, detail=f"Meter {meter_id} not found")
@@ -138,7 +129,6 @@ async def get_meter_usage(
     # Generate minute-level readings
     readings = []
     current = start_dt
-    from datetime import timedelta
 
     while current < end_dt:
         value = get_usage_value_for_time(current, meter_id)
@@ -149,6 +139,34 @@ async def get_meter_usage(
         current += timedelta(minutes=1)
 
     return readings
+
+
+@app.get("/meter-usage", response_model=List[UsageReading])
+async def get_meter_usage(
+    meter_id: str = Query(..., description="The meter ID to query"),
+    start_time: str = Query(..., description="Start time in ISO format (e.g., 2025-01-01T00:00:00Z)"),
+    end_time: str = Query(..., description="End time in ISO format (e.g., 2025-01-01T01:00:00Z)"),
+):
+    """
+    Return minute-level usage data for a meter within the specified time range.
+    No rate limiting.
+    """
+    return await _get_meter_usage_impl(meter_id, start_time, end_time)
+
+
+@app.get("/meter-usage-ratelimited", response_model=List[UsageReading])
+@limiter.limit("500/second")
+async def get_meter_usage_ratelimited(
+    request: Request,
+    meter_id: str = Query(..., description="The meter ID to query"),
+    start_time: str = Query(..., description="Start time in ISO format (e.g., 2025-01-01T00:00:00Z)"),
+    end_time: str = Query(..., description="End time in ISO format (e.g., 2025-01-01T01:00:00Z)"),
+):
+    """
+    Return minute-level usage data for a meter within the specified time range.
+    Rate limited to 500 requests per second.
+    """
+    return await _get_meter_usage_impl(meter_id, start_time, end_time)
 
 
 if __name__ == "__main__":
