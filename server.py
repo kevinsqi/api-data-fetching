@@ -155,7 +155,7 @@ async def get_meter_usage(
 
 
 @app.get("/meter-usage-ratelimited", response_model=List[UsageReading])
-@limiter.limit("500/second")
+@limiter.limit("20/second")
 async def get_meter_usage_ratelimited(
     request: Request,
     meter_id: str = Query(..., description="The meter ID to query"),
