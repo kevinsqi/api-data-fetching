@@ -82,6 +82,11 @@ def get_usage_value_for_time(dt: datetime, meter_id: str) -> float:
     minute_variation = math.sin(dt.minute * 0.1 + meter_num * 0.1) * 0.5
     usage += minute_variation
 
+    # Small day-to-day deterministic variation (~±5%), unique per meter.
+    day_ordinal = dt.date().toordinal()
+    daily_factor = 1.0 + 0.05 * math.sin(day_ordinal * 0.7 + meter_num * 0.3)
+    usage *= daily_factor
+
     # Ensure non-negative and round to 2 decimal places
     return round(max(0.0, usage), 2)
 
